@@ -1,7 +1,7 @@
 from helping import get_chatbot_response
 import streamlit as st
-import android_preprocessor
-import iphone_preprocessor
+import preprocessing.android_preprocessor as android_preprocessor
+import preprocessing.iphone_preprocessor as iphone_preprocessor
 import helping
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -342,10 +342,12 @@ if uploaded_file is not None:
 
             user_input = st.text_input("Ask me about the chat analysis...")
 
+            # Check if user entered a message
             if user_input:
-                response = get_chatbot_response(user_input)  # Call the helper function
-                st.write(response)  # Display chatbot response
+                response = get_chatbot_response(user_input, df)  # Pass None since df is handled inside helping.py
 
+                # Display response correctly
+                st.write(response)
                         
     except Exception as e:
         st.error(f"Error processing the file: {e}")

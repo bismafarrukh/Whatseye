@@ -7,6 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
+import os
 
 nltk.download("stopwords")
 
@@ -17,18 +18,32 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-# Load Dataset
-df = pd.read_csv("chatbot_dataset.csv").dropna()
+# Define dataset path
+dataset_path = os.path.join("datasets", "chatbot_dataset.csv" )
 
-# Ensure the dataset has "Message", "Intent", and "Response"
-if "Response" not in df.columns:
-    raise ValueError("Dataset must contain 'Message', 'Intent', and 'Response' columns.")
+# Load the dataset
+df = pd.read_csv(dataset_path)
+
+# Ensure the dataset has "Message" and "Intent"
+required_columns = {"Message", "Intent"}
+if not required_columns.issubset(df.columns):
+    raise ValueError(f"Dataset must contain {required_columns} columns. Found: {df.columns}")
+
+# Drop missing values
+df = df.dropna()
 
 # Apply text cleaning
 df["Message"] = df["Message"].apply(clean_text)
 
+# Debug: Print dataset info
+print("\n🔹 Dataset Sample:\n", df.head())
+
+# Ensure dataset is not empty after cleaning
+if df.empty:
+    raise ValueError("Dataset is empty after preprocessing. Check data quality.")
+
 # Vectorization
-vectorizer = TfidfVectorizer(max_features=1000, stop_words="english")
+vectorizer = TfidfVectorizer(max_features=1000, stop_words=None)
 X = vectorizer.fit_transform(df["Message"])
 y = df["Intent"]
 
@@ -50,12 +65,5 @@ print("\n🔹 Classification Report:\n", classification_report(y_test, y_pred))
 joblib.dump(vectorizer, "tfidf_vectorizer_chatbot.pkl")
 joblib.dump(model, "chatbot_model.pkl")
 
-# Save intent-response mapping
-intent_response_mapping = df.groupby("Intent")["Response"].apply(list).to_dict()
-joblib.dump(intent_response_mapping, "intent_response_mapping.pkl")
-
-print("\n✅ Chatbot model, vectorizer, and response mapping saved successfully!")
-
-
-
+print("\n✅ Chatbot model and vectorizer saved successfully!")
 

@@ -24,7 +24,8 @@ def clean_text(text):
 # Load Dataset
 def load_dataset():
     # Use a smaller sample for testing to avoid freezing
-    df = pd.read_csv("Dataset 11000 Reviews.tsv", sep="\t", encoding="utf-8", on_bad_lines='skip', header=None)
+    file_path = "datasets/Dataset 11000 Reviews.tsv"
+    df = pd.read_csv(file_path, sep="\t", encoding="utf-8", on_bad_lines='skip', header=None)
 
     # Assign correct column names
     df.columns = ["sentiment", "message"]  # Assuming first column is sentiment, second is message

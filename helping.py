@@ -14,6 +14,8 @@ import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from urlextract import URLExtract
 import pandas as pd  # Required if you're using DataFrame operations
+import os
+
 
 
 
@@ -49,8 +51,15 @@ def most_busy_users(df):
     df = round((df['user'].value_counts() / df.shape[0] * 100), 2).reset_index().rename(columns={'index': 'name', 'user':'percentage'})
     return x , df
 
+def least_busy_user(df):
+    group_name = df['user'].iloc[0]
+    df = df[(df['user'] != "group_notification") & (df['user'] != group_name)]
+    least_active = df['user'].value_counts().idxmin()
+    return f"The least active user is {least_active}."
+
 def create_wordcloud(selected_user, df):
-    with open('stopwords.txt', 'r') as f:
+    stopwords_path = os.path.join("preprocessing", "stopwords.txt")
+    with open(stopwords_path, 'r') as f:
         stop_words = f.read().split()
 
     if selected_user != 'Overall':
@@ -74,10 +83,9 @@ def create_wordcloud(selected_user, df):
 
 
 def most_common_words(selected_user,df):
-    with open('stopwords.txt', 'r') as f:
+    stopwords_path = os.path.join("preprocessing", "stopwords.txt")
+    with open(stopwords_path, 'r') as f:
         stop_words = f.read().split()
-
-
     if selected_user != 'Overall':
         df = df[df['user'] == selected_user]
 
@@ -175,8 +183,8 @@ def preprocess_chat(df):
 
 # Load trained sentiment model
 def load_sentiment_model():
-    model = joblib.load("sentiment_model.pkl")
-    vectorizer = joblib.load("tfidf_vectorizer.pkl")
+    model = joblib.load(os.path.join("vectorizer_files", "sentiment_model.pkl"))
+    vectorizer = joblib.load(os.path.join("vectorizer_files","tfidf_vectorizer.pkl"))
     return model, vectorizer
 
 # Download required NLTK resources
@@ -275,17 +283,151 @@ def detect_mood_swings(df):
 
 
 # Load trained model, vectorizer, and response mapping
-vectorizer = joblib.load("tfidf_vectorizer_chatbot.pkl")
-model = joblib.load("chatbot_model.pkl")
-intent_response_mapping = joblib.load("intent_response_mapping.pkl")
 
-def get_chatbot_response(user_input):
-    user_input = [user_input]  # Convert to list for vectorization
-    transformed_input = vectorizer.transform(user_input)
-    predicted_intent = model.predict(transformed_input)[0]  # Get predicted intent
+vectorizer = joblib.load(os.path.join("vectorizer_files", "tfidf_vectorizer_chatbot.pkl"))
+model = joblib.load(os.path.join("vectorizer_files", "chatbot_model.pkl"))
+intent_response_mapping = joblib.load(os.path.join("vectorizer_files","intent_response_mapping.pkl"))
+
+
+# Intent-to-function mapping
+intent_mapping = {
+    0: emoji_helper,                 # (selected_user, df)
+    1: most_busy_users,              # (df)
+    2: least_busy_user,              # (df)
+    3: fetch_stats,                  # (selected_user, df) --> For link count
+    4: fetch_stats,                  # (selected_user, df)
+    5: daily_timeline,               # (df)
+    6: "With Whatseye, your chats are safe. Your privacy is our first priority.",  # Static response
+    7: analyze_sentiment,            # (user_input)
+    8: analyze_sentiment,            # (user_input)
+    9: response_time_analysis,       # (df)
+    10: response_time_analysis       # (df)
+}
+
+def get_chatbot_response(user_input, df, selected_user="Overall"):
+    """
+    Process user input, predict intent, and return the corresponding function's output.
+    """
+    # Ensure df is provided
+    if df is None or df.empty:
+        return "Error: Chat dataset is missing or empty."
+
+    # Transform input using the vectorizer
+    user_input_tfidf = vectorizer.transform([user_input])
     
-    # Get a response from mapping or return a default message
-    if predicted_intent in intent_response_mapping:
-        return random.choice(intent_response_mapping[predicted_intent])  # Choose a random response
-    else:
-        return "Sorry, I didn't understand that."
+    # Predict intent
+    intent = model.predict(user_input_tfidf)[0]  
+
+    if intent in intent_mapping:
+        response_function = intent_mapping[intent]
+
+        if callable(response_function):  
+            if intent == 0:  
+                emoji_df = response_function(selected_user, df)  # emoji_helper
+                if emoji_df.empty:
+                    result = "No emojis found in your chats."
+                else:
+                    top_emoji, count = emoji_df.iloc[0]  
+                    result = f"Your most used emoji is {top_emoji} ({count} times)."
+
+            elif intent == 1:  
+                user_counts, _ = response_function(df)  # most_busy_users
+                if user_counts.empty:
+                    result = "No chat activity found."
+                else:
+                    most_active_user = user_counts.idxmax()
+                    message_count = user_counts.max()
+                    result = f"{most_active_user} is the most active user with {message_count} messages."
+
+            elif intent == 2:  
+                result = response_function(df)  # least_busy_user (already returns a string)
+
+            elif intent == 3:  # Intent for total links
+                num_messages, _, _, link_count = response_function(selected_user, df)  # fetch_stats
+                result = f"A total of {link_count} links have been shared in your chats."
+
+            elif intent == 4:  # Intent for total messages
+                num_messages, _, _, _ = response_function(selected_user, df)  # fetch_stats
+                result = f"The total number of messages in this chat is {num_messages}."
+
+            elif intent == 5:  # Intent for most active chat time
+                daily_data = response_function(selected_user, df)  # daily_timeline
+            
+                if daily_data.empty:
+                    result = "No activity found in your chats."
+                else:
+                    # Find the day with the highest message count
+                    busiest_day = daily_data.loc[daily_data['message'].idxmax(), 'only_date']
+                    max_messages = daily_data['message'].max()
+                    
+                    result = f"Your chats were most active on {busiest_day} with {max_messages} messages."
+
+
+            elif intent == 6:  
+                result = response_function  # Static message: WhatsEye privacy assurance
+
+            elif intent == 7:  # Intent for positivity percentage
+                sentiment_df = integrate_sentiment_analysis(df)  # Apply sentiment analysis to entire chat
+                
+                if sentiment_df.empty:
+                    result = "No messages found for sentiment analysis."
+                else:
+                    positive_count = (sentiment_df['sentiment'] == "Positive").sum()
+                    total_messages = len(sentiment_df)
+                    positivity_percentage = round((positive_count / total_messages) * 100, 2)
+
+                    result = f"The positivity percentage of this group chat is {positivity_percentage}%."
+
+            elif intent == 8:  # Intent for negativity percentage
+                sentiment_df = integrate_sentiment_analysis(df)  # Apply sentiment analysis to entire chat
+
+                if sentiment_df.empty:
+                    result = "No messages found for sentiment analysis."
+                else:
+                    negative_count = (sentiment_df['sentiment'] == "Negative").sum()
+                    total_messages = len(sentiment_df)
+                    negativity_percentage = round((negative_count / total_messages) * 100, 2)
+
+                    result = f"The negativity percentage of this group chat is {negativity_percentage}%."
+
+            elif intent == 9:  # Intent for fastest responder
+                response_time_df = response_function(df)  # response_time_analysis
+                
+                if response_time_df.empty:
+                    result = "No response time data available."
+                else:
+                    fastest_responder = response_time_df.iloc[0, 0]  # First row (fastest)
+                    result = f"{fastest_responder} is the fastest responder in your chats."
+
+            elif intent == 10:  # Intent for slowest responder
+                response_time_df = response_function(df)  # response_time_analysis
+                
+                if response_time_df.empty:
+                    result = "No response time data available."
+                else:
+                    slowest_responder = response_time_df.iloc[-1, 0]  # Last row (slowest)
+                    result = f"{slowest_responder} takes the longest to reply in your chats."
+
+
+            elif intent == 11:  # Intent for most active chat day
+                day_activity = week_activity_map(selected_user, df)
+                
+                if day_activity.empty:
+                    result = "No activity data available."
+                else:
+                    most_active_day = day_activity.idxmax()  # Get the day with max messages
+                    message_count = day_activity.max()  # Get the highest message count
+
+                    result = f"Your most active day is {most_active_day} with {message_count} messages."
+
+
+            else:
+                result = "Error: Unhandled intent."  
+        else:
+            result = response_function  # Static message for intent 6
+
+        return str(result)
+
+    return "Sorry, I didn't understand that."
+
+
