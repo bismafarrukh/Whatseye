@@ -1,0 +1,32 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# VSCode settings
+.vscode/
+*.code-workspace
+
+# Model and vectorizer files
+*.pkl
+*.joblib
+
+# Datasets
+datasets/
+*.csv
+
+# Logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+~$*
+
+# OneDrive sync
+*.tmp
