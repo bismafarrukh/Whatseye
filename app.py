@@ -98,6 +98,24 @@ if uploaded_file is not None:
             # Sidebar selection
             selected_user = st.sidebar.selectbox("Show analysis for:", user_list)
 
+            # Fetch statistics
+            num_messages, words, num_media_messages, num_links = helping.fetch_stats(selected_user, df)
+            st.title("Top Statistics")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.header("Total Messages")
+                st.title(num_messages)
+            with col2:
+                st.header("Total Words")
+                st.title(words)
+            with col3:
+                st.header("Total Media Shared")
+                st.title(num_media_messages)
+            with col4:
+                st.header("Total Links Shared")
+                st.title(num_links)
+
             # Perform sentiment analysis before visualizing
             df = integrate_sentiment_analysis(df)
 
@@ -180,23 +198,7 @@ if uploaded_file is not None:
             # Display the plot
             st.plotly_chart(fig)
 
-            # Fetch statistics
-            num_messages, words, num_media_messages, num_links = helping.fetch_stats(selected_user, df)
-            st.title("Top Statistics")
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.header("Total Messages")
-                st.title(num_messages)
-            with col2:
-                st.header("Total Words")
-                st.title(words)
-            with col3:
-                st.header("Total Media Shared")
-                st.title(num_media_messages)
-            with col4:
-                st.header("Total Links Shared")
-                st.title(num_links)
+            
 
             # Monthly Timeline
             st.title("Monthly Timeline")
